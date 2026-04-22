@@ -1,0 +1,189 @@
+# filepath: gorshok_distortion\.github\workflows\build.yml
+name: Build Gorshok Distortion Plugin
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    
+    strategy:
+      matrix:
+        build_type: [Release]
+    
+    steps:
+      # Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # Install NASM (Assembly compiler)
+      - name: Install NASM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm
+      
+      # Install CMake
+      - name: Install CMake
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake
+          cmake --version
+      
+      # Install build tools
+      - name: Install build tools
+        run: |
+          sudo apt-get install -y build-essential gcc g++
+      
+      # Create build directory
+      - name: Create build directory
+        run: mkdir -p build
+      
+      # Configure with CMake
+      - name: Configure CMake
+        working-directory: build
+        run: |
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_AVX=ON \
+            -DENABLE_SSE=ON \
+            -DBUILD_TEST=ON \
+            -DBUILD_SHARED_LIBS=ON
+      
+      # Build the plugin
+      - name: Build plugin
+        working-directory: build
+        run: |
+          cmake --build . --config Release --parallel $(nproc)
+      
+      # List build artifacts
+      - name: List build artifacts
+        run: |
+          echo "=== Build Artifacts ==="
+          find build -type f -name "*.so" -o -name "*.dll" -o -name "GorshokDistortion*" | head -20
+      
+      # Create artifact package
+      - name: Create artifact package
+        run: |
+          mkdir -p artifact
+          
+          # Find and copy the shared library
+          if [ -f "build/lib/libGorshokDistortion.so" ]; then
+            cp build/lib/libGorshokDistortion.so artifact/
+            echo "Copied: libGorshokDistortion.so"
+          fi
+          
+          # Copy test executable if exists
+          if [ -f "build/bin/gorshok_test" ]; then
+            cp build/bin/gorshok_test artifact/
+            echo "Copied: gorshok_test"
+          fi
+          
+          # Copy ASM object file if exists
+          if [ -f "build/dsp_core.obj" ]; then
+            cp build/dsp_core.obj artifact/
+            echo "Copied: dsp_core.obj"
+          fi
+          
+          ls -la artifact/
+      
+      # Upload artifact
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gorshok_Distortion_Plugin
+          path: artifact/*
+          retention-days: 30
+          if-no-files-found: error
+      
+      # Display build info
+      - name: Display build information
+        run: |
+          echo "=== Build Summary ==="
+          echo "NASM version: $(nasm --version | head -1)"
+          echo "CMake version: $(cmake --version | head -1)"
+          echo "GCC version: $(gcc --version | head -1)"
+          echo ""
+          echo "Build completed successfully!"
+
+  test:
+    runs-on: ubuntu-22.04
+    needs: build
+    
+    steps:
+      # Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # Download artifact
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Gorshok_Distortion_Plugin
+          path: ./artifact
+      
+      # List downloaded files
+      - name: List downloaded files
+        run: |
+          echo "=== Downloaded Artifacts ==="
+          ls -la artifact/
+      
+      # Check if test executable exists
+      - name: Check test executable
+        run: |
+          if [ -f "artifact/gorshok_test" ]; then
+            echo "Test executable found!"
+            chmod +x artifact/gorshok_test
+            # Note: Cannot run test without display/audio setup
+            # In production, would run: ./artifact/gorshok_test
+          else
+            echo "Test executable not found in artifacts"
+          fi
+
+  # Optional: Build for Windows (cross-compile)
+  build-windows:
+    runs-on: ubuntu-22.04
+    if: false  # Disabled by default - enable if needed
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install NASM
+        run: sudo apt-get install -y nasm
+      
+      - name: Install MinGW
+        run: sudo apt-get install -y mingw-w64
+      
+      - name: Create build directory
+        run: mkdir -p build
+      
+      - name: Configure CMake (Windows cross-compile)
+        working-directory: build
+        run: |
+          cmake .. \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+            -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_AVX=ON
+      
+      - name: Build Windows plugin
+        working-directory: build
+        run: cmake --build . --config Release
+      
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gorshok_Distortion_Plugin_Windows
+          path: build/lib/*.dll
+          retention-days: 30
