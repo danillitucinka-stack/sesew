@@ -5,7 +5,11 @@
 # =============================================================================
 
 cmake_minimum_required(VERSION 3.15)
-project(GorshokDistortion VERSION 1.0.0 LANGUAGES C ASM)
+
+# Enable ASM_NASM language for proper NASM support
+enable_language(ASM_NASM)
+
+project(GorshokDistortion VERSION 1.0.0 LANGUAGES C)
 
 # =============================================================================
 # Build Options
@@ -76,14 +80,14 @@ endif()
 # Source Files
 # =============================================================================
 
-# C source files
+# C source files - use absolute path from source directory
 set(C_SOURCES
-    src/main.c
+    ${CMAKE_SOURCE_DIR}/src/main.c
 )
 
-# Assembly source files
+# Assembly source files - use absolute path from source directory
 set(ASM_SOURCES
-    src/dsp_core.asm
+    ${CMAKE_SOURCE_DIR}/src/dsp_core.asm
 )
 
 # =============================================================================
