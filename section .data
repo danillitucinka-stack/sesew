@@ -1,0 +1,19 @@
+section .data
+    ONE        dq 1.0
+    NEG_ONE    dq -1.0
+    HALF       dq 0.5
+    lp_alpha   dq 0.5
+
+section .bss
+    lp_state_l resq 1
+
+section .text
+    global gorshok_process_asm
+    global gorshok_init_filter
+
+gorshok_init_filter:
+    movss [rel lp_alpha], xmm0
+    ret
+
+gorshok_process_asm:
+    ; RCX = input, RDX = output, R8 = count, XMM0 = gain, X
