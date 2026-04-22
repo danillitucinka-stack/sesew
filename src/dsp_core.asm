@@ -1,34 +1,141 @@
 ; filepath: gorshok_distortion\src\dsp_core.asm
 ; =============================================================================
-; Gorshok Distortion - Core DSP Processing
+; Gorshok Distortion - Core DSP Processing (Simplified)
 ; High-gain distortion with hard clipping and low-pass filter
-; Optimized for x86-64 with SSE/AVX instructions
 ; =============================================================================
 
 section .data
     ; Constants
-    ONE            dq 1.0
-    NEG_ONE        dq -1.0
-    HALF           dq 0.5
-    TWO            dq 2.0
+    ONE        dq 1.0
+    NEG_ONE    dq -1.0
+    HALF       dq 0.5
     
-    ; Filter coefficients (will be updated based on Tone parameter)
-    lp_coef_a1     dq 0.0     ; a1 coefficient for low-pass
-    lp_coef_b0     dq 0.0     ; b0 coefficient
-    lp_coef_b1     dq 0.0     ; b1 coefficient
+    ; Filter coefficient
+    lp_alpha   dq 0.5
 
 section .bss
-    ; Filter state variables (2 samples for stereo)
-    lp_state_l0    resq 1
-    lp_state_l1    resq 1
-    lp_state_r0    resq 1
-    lp_state_r1    resq 1
+    ; Filter state (stereo)
+    lp_state_l resq 1
+    lp_state_r resq 1
 
 section .text
-    global process_audio_sse
-    global process_audio_avx
-    global init_filter_coefficients
-    global update_filter_tone
+    global gorshok_process_asm
+    global gorshok_init_filter
+
+; =============================================================================
+; Initialize filter based on Tone parameter
+; Input: XMM0 = Tone (0.0 - 1.0)
+; =============================================================================
+gorshok_init_filter:
+    ; Simple tone control: alpha = 0.1 + tone * 0.8
+    ; Tone 0 = dark (0.1), Tone 1 = bright (0.9)
+    addss xmm0, [rel HALF]     ; tone + 0.5
+    mulss xmm0, [rel HALF]     ; (tone + 0.5) * 0.5 = 0.5*tone + 0.25
+    minss xmm0, [rel ONE]      ; clamp to 1.0 max
+    maxss xmm0, [rel HALF]     ; clamp to 0.5 min
+    movss [rel lp_alpha], xmm0
+    ret
+
+; =============================================================================
+; Process audio buffer - Simple SSE version
+; Input:
+;   RCX = input buffer (float*)
+;   RDX = output buffer (float*)
+;   R8  = sample count
+;   XMM0 = Gain
+;   XMM1 = Tone (unused, filter already initialized)
+;   XMM2 = Output level
+; =============================================================================
+gorshok_process_asm:
+    push rbp
+    push rbx
+    push r12
+    push r13
+    push r14
+    
+    ; Save XMM6-XMM9
+    sub rsp, 64
+    movaps [rsp], xmm6
+    movaps [rsp+16], xmm7
+    movaps [rsp+32], xmm8
+    movaps [rsp+48], xmm9
+    
+    ; Load parameters
+    movaps xmm6, xmm0            ; Gain
+    movaps xmm7, xmm2            ; Output level
+    
+    ; Load filter coefficient
+    movss xmm8, [rel lp_alpha]
+    shufps xmm8, xmm8, 0         ; Broadcast
+    
+    ; Load filter states
+    movss xmm9, [rel lp_state_l]
+    
+    ; Setup pointers
+    mov r12, rcx                 ; input
+    mov r13, rdx                 ; output
+    mov r14, r8                  ; sample count
+    
+    ; Process samples
+    test r14, r14
+    jz .done
+    
+.loop:
+    ; Load 4 samples (2 stereo pairs: L R L R)
+    movups xmm0, [r12]
+    
+    ; Apply gain
+    mulps xmm0, xmm6
+    
+    ; Hard clipping: clamp to [-1, 1]
+    movaps xmm1, [rel ONE]
+    minps xmm1, xmm0
+    maxps xmm0, [rel NEG_ONE]
+    
+    ; Simple low-pass filter (single pole IIR)
+    ; y = alpha * x + (1-alpha) * y_prev
+    ; Process left channel (lower 64 bits)
+    movaps xmm2, xmm0
+    unpcklps xmm2, xmm2          ; Duplicate L
+    mulps xmm2, xmm8             ; alpha * x
+    movaps xmm3, xmm9
+    subps xmm3, [rel ONE]        ; (1-alpha) = - (alpha-1)
+    addps xmm3, xmm8
+    mulps xmm3, xmm9             ; (1-alpha) * y_prev
+    addps xmm2, xmm3             ; y = alpha*x + (1-alpha)*y_prev
+    movss xmm9, xmm2             ; Save state
+    
+    ; Apply output level
+    mulps xmm2, xmm7
+    
+    ; Store output
+    movups [r13], xmm2
+    
+    ; Advance
+    add r12, 16
+    add r13, 16
+    sub r14, 4
+    
+    jg .loop
+    
+.done:
+    ; Save filter state
+    movss [rel lp_state_l], xmm9
+    
+    ; Restore XMM
+    movaps xmm6, [rsp]
+    movaps xmm7, [rsp+16]
+    movaps xmm8, [rsp+32]
+    movaps xmm9, [rsp+48]
+    add rsp, 64
+    
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+    pop rbp
+    
+    ret
 
 ; =============================================================================
 ; Initialize filter coefficients based on Tone parameter (0.0 - 1.0)
