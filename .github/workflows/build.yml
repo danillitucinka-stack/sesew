@@ -26,6 +26,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
+      # Debug: Show directory structure
+      - name: Debug directory structure
+        run: |
+          echo "=== Repository Structure ==="
+          ls -la
+          echo ""
+          echo "=== Full Directory Tree ==="
+          ls -R
+          echo ""
+          echo "=== Check src folder ==="
+          ls -la src/
+      
       # Install NASM (Assembly compiler)
       - name: Install NASM
         run: |
