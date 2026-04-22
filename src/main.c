@@ -60,6 +60,18 @@ extern void init_filter_coefficients(float tone);
 extern void update_filter_tone(float tone);
 
 // =============================================================================
+// Forward Declarations
+// =============================================================================
+
+// Plugin API forward declarations
+GorshokPlugin* plugin_create(uint32_t sample_rate, uint32_t buffer_size);
+void plugin_destroy(GorshokPlugin* plugin);
+int plugin_set_parameter(GorshokPlugin* plugin, const char* name, float value);
+float plugin_get_parameter(GorshokPlugin* plugin, const char* name);
+void plugin_process(GorshokPlugin* plugin, float* input, float* output, uint32_t frame_count);
+void plugin_reset(GorshokPlugin* plugin);
+
+// =============================================================================
 // Plugin State
 // =============================================================================
 

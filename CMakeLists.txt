@@ -163,6 +163,9 @@ elseif(UNIX)
     set_target_properties(GorshokDistortion PROPERTIES
         LINK_FLAGS "-shared -fPIC"
     )
+    
+    # Link math library for sin/cos functions
+    target_link_libraries(GorshokDistortion PRIVATE m)
 endif()
 
 # Include directories
@@ -176,7 +179,7 @@ target_include_directories(GorshokDistortion PRIVATE
 
 if(BUILD_TEST)
     add_executable(gorshok_test 
-        src/main.c 
+        ${CMAKE_SOURCE_DIR}/src/main.c 
         ${ASM_OBJECTS}
     )
     
@@ -184,7 +187,10 @@ if(BUILD_TEST)
         GORSHOK_TEST
     )
     
-    target_link_libraries(gorshok_test PRIVATE)
+    # Link math library for sin/cos functions
+    if(UNIX)
+        target_link_libraries(gorshok_test PRIVATE m)
+    endif()
     
     # Copy test to output directory
     add_custom_command(TARGET gorshok_test POST_BUILD
